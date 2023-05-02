@@ -6,8 +6,9 @@ license = "MIT"
 edition = "2018"
 readme = "./README.md"
 documentation = "https://docs.rs/ethers-ccip-read"
-repository = "https://github.com/onbjerg/ethers-ccip-read"
-homepage = "https://github.com/onbjerg/ethers-ccip-read"
+repository = "https://github.com/ensdomains/ethers-ccip-read"
+homepage = "https://github.com/ensdomains/ethers-ccip-read"
+keywords = ["ens", "ethers", "ccip-read", "offchain-resolver", "l2-resolver"]
 description = """
 CCIP-Read middleware for ethers-rs
 """
