@@ -12,6 +12,10 @@ keywords = ["ens", "ethers", "ccip-read", "offchain-resolver", "l2-resolver"]
 description = """
 CCIP-Read middleware for ethers-rs
 """
+exclude = [
+    ".github",
+    "examples"
+]
 
 [dependencies]
 # Error handling
