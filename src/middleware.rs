@@ -12,7 +12,7 @@ use ethers_core::{
     utils::{self, hex},
 };
 use ethers_providers::{ens, erc, Middleware, MiddlewareError};
-use futures_util::{try_join};
+use futures_util::try_join;
 use hex::FromHex;
 use reqwest::{Response, Url};
 use serde_json::Value;
