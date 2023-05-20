@@ -11,9 +11,10 @@ use ethers_core::{
     },
     utils::{self, hex},
 };
-use ethers_providers::{ens, Middleware, MiddlewareError};
+use ethers_providers::{ens, erc, Middleware, MiddlewareError};
+use futures_util::{try_join};
 use hex::FromHex;
-use reqwest::Response;
+use reqwest::{Response, Url};
 use serde_json::Value;
 
 use crate::{
@@ -394,6 +395,71 @@ where
             )
             .await?;
         Ok(field)
+    }
+
+    async fn resolve_avatar(&self, ens_name: &str) -> Result<Url, Self::Error> {
+        let (field, owner) = try_join!(
+            self.resolve_field(ens_name, "avatar"),
+            self.resolve_name(ens_name)
+        )?;
+        let url = Url::from_str(&field)
+            .map_err(|e| CCIPReadMiddlewareError::URLParseError(e.to_string()))?;
+        match url.scheme() {
+            "https" | "data" => Ok(url),
+            "ipfs" => erc::http_link_ipfs(url).map_err(CCIPReadMiddlewareError::URLParseError),
+            "eip155" => {
+                let token = erc::ERCNFT::from_str(url.path())
+                    .map_err(CCIPReadMiddlewareError::URLParseError)?;
+                match token.type_ {
+                    erc::ERCNFTType::ERC721 => {
+                        let tx = TransactionRequest {
+                            data: Some(
+                                [&erc::ERC721_OWNER_SELECTOR[..], &token.id].concat().into(),
+                            ),
+                            to: Some(NameOrAddress::Address(token.contract)),
+                            ..Default::default()
+                        };
+                        let data = self.call(&tx.into(), None).await?;
+                        if decode_bytes::<Address>(ParamType::Address, data) != owner {
+                            return Err(CCIPReadMiddlewareError::NFTOwnerError(
+                                "Incorrect owner.".to_string(),
+                            ));
+                        }
+                    }
+                    erc::ERCNFTType::ERC1155 => {
+                        let tx = TransactionRequest {
+                            data: Some(
+                                [
+                                    &erc::ERC1155_BALANCE_SELECTOR[..],
+                                    &[0x0; 12],
+                                    &owner.0,
+                                    &token.id,
+                                ]
+                                .concat()
+                                .into(),
+                            ),
+                            to: Some(NameOrAddress::Address(token.contract)),
+                            ..Default::default()
+                        };
+                        let data = self.call(&tx.into(), None).await?;
+                        if decode_bytes::<u64>(ParamType::Uint(64), data) == 0 {
+                            return Err(CCIPReadMiddlewareError::NFTOwnerError(
+                                "Incorrect balance.".to_string(),
+                            ));
+                        }
+                    }
+                }
+
+                let image_url = self.resolve_nft(token).await?;
+                match image_url.scheme() {
+                    "https" | "data" => Ok(image_url),
+                    "ipfs" => erc::http_link_ipfs(image_url)
+                        .map_err(CCIPReadMiddlewareError::URLParseError),
+                    _ => Err(CCIPReadMiddlewareError::UnsupportedURLSchemeError),
+                }
+            }
+            _ => Err(CCIPReadMiddlewareError::UnsupportedURLSchemeError),
+        }
     }
 
     /// Resolve an ENS name to an address

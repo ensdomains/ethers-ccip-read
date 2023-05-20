@@ -34,6 +34,7 @@ async-trait = { version = "0.1.50", default-features = false }
 # Ethers
 ethers-core = "2.0.4"
 ethers-providers = "2.0.4"
+futures-util = "0.3.28"
 
 [dev-dependencies]
 tokio = { version = "1.7.1", features = ["macros", "rt-multi-thread"] }

@@ -26,6 +26,15 @@ pub enum CCIPReadMiddlewareError<M: Middleware> {
     /// Invalid reverse ENS name
     #[error("Reversed ens name not pointing to itself: {0}")]
     EnsNotOwned(String),
+
+    #[error("Error(s) during parsing avatar url: {0}")]
+    URLParseError(String),
+
+    #[error("Error(s) during NFT ownership verification: {0}")]
+    NFTOwnerError(String),
+
+    #[error("Unsupported URL scheme")]
+    UnsupportedURLSchemeError,
 }
 
 impl<M: Middleware> MiddlewareError for CCIPReadMiddlewareError<M> {
