@@ -397,6 +397,7 @@ where
         Ok(field)
     }
 
+    /// Resolve avatar field of an ENS name
     async fn resolve_avatar(&self, ens_name: &str) -> Result<Url, Self::Error> {
         let (field, owner) = try_join!(
             self.resolve_field(ens_name, "avatar"),
