@@ -79,7 +79,7 @@ where
         let _tx_result: Result<Bytes, _> = self.call(&_tx_request.into(), None).await;
         let _tx = match _tx_result {
             Ok(_tx) => _tx,
-            Err(_) => Bytes::from([])
+            Err(_) => Bytes::from([]),
         };
 
         // If the response is empty, the resolver does not support wildcard resolution
