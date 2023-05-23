@@ -76,7 +76,11 @@ where
             ..Default::default()
         };
 
-        let _tx = self.call(&_tx_request.into(), None).await?;
+        let _tx_result: Result<Bytes, _> = self.call(&_tx_request.into(), None).await;
+        let _tx = match _tx_result {
+            Ok(_tx) => _tx,
+            Err(_) => Bytes::from([])
+        };
 
         // If the response is empty, the resolver does not support wildcard resolution
         if _tx.0.is_empty() {
@@ -272,7 +276,7 @@ where
             Ok(response) => response.to_string(),
             Err(provider_error) => {
                 let content = provider_error.as_error_response().unwrap();
-                let data = content.data.as_ref().unwrap();
+                let data = content.data.as_ref().unwrap_or(&serde_json::Value::Null);
                 data.to_string()
                     .trim_matches('"')
                     .trim_start_matches("0x")
