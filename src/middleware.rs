@@ -79,7 +79,10 @@ where
         let _tx_result: Result<Bytes, _> = self.call(&_tx_request.into(), None).await;
         let _tx = match _tx_result {
             Ok(_tx) => _tx,
-            Err(_) => Bytes::from([]),
+            Err(_error) => {
+                println!("Error calling: {:?}", _error);
+                Bytes::from([])
+            },
         };
 
         // If the response is empty, the resolver does not support wildcard resolution
@@ -277,6 +280,9 @@ where
             Err(provider_error) => {
                 let content = provider_error.as_error_response().unwrap();
                 let data = content.data.as_ref().unwrap_or(&serde_json::Value::Null);
+                if data.is_null() {
+                    return Err(CCIPReadMiddlewareError::GatewayError(content.to_string()))
+                }
                 data.to_string()
                     .trim_matches('"')
                     .trim_start_matches("0x")
@@ -353,10 +359,12 @@ where
                 return self._call(&new_transaction, block_id, attempt + 1).await;
             }
         }
-
         let result = match Bytes::from_str(&result) {
             Ok(bytes) => bytes,
-            Err(error) => return Err(CCIPReadMiddlewareError::GatewayError(error.to_string())),
+            Err(error) => {
+                println!("error: {:?}", error);
+                return Err(CCIPReadMiddlewareError::GatewayError(error.to_string()))
+            },
         };
 
         Ok(result)
