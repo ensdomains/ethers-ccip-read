@@ -82,7 +82,7 @@ where
             Err(_error) => {
                 println!("Error calling: {:?}", _error);
                 Bytes::from([])
-            },
+            }
         };
 
         // If the response is empty, the resolver does not support wildcard resolution
@@ -281,7 +281,7 @@ where
                 let content = provider_error.as_error_response().unwrap();
                 let data = content.data.as_ref().unwrap_or(&serde_json::Value::Null);
                 if data.is_null() {
-                    return Err(CCIPReadMiddlewareError::GatewayError(content.to_string()))
+                    return Err(CCIPReadMiddlewareError::GatewayError(content.to_string()));
                 }
                 data.to_string()
                     .trim_matches('"')
@@ -363,8 +363,8 @@ where
             Ok(bytes) => bytes,
             Err(error) => {
                 println!("error: {:?}", error);
-                return Err(CCIPReadMiddlewareError::GatewayError(error.to_string()))
-            },
+                return Err(CCIPReadMiddlewareError::GatewayError(error.to_string()));
+            }
         };
 
         Ok(result)
