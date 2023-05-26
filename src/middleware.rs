@@ -21,7 +21,7 @@ use crate::{
     CCIPReadMiddlewareError,
 };
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CCIPReadMiddleware<M> {
     inner: M,
     ens: Option<Address>,
