@@ -1,25 +1,9 @@
-use ethers_core::{
-    abi::{self, Detokenize, ParamType},
-    types::Bytes,
-};
-
 pub(crate) fn truncate_str(src: &str, side: usize) -> String {
     if src.len() < side * 2 + 3 {
         return src.to_string();
     }
 
     format!("{}..{}", &src[..side], &src[src.len() - side..])
-}
-
-/// infallible conversion of Bytes to Address/String
-///
-/// # Panics
-///
-/// If the provided bytes were not an interpretation of an address
-pub fn decode_bytes<T: Detokenize>(param: ParamType, bytes: Bytes) -> T {
-    let tokens = abi::decode(&[param], bytes.as_ref())
-        .expect("could not abi-decode bytes to address tokens");
-    T::from_tokens(tokens).expect("could not parse tokens as address")
 }
 
 /// Encodes a domain name into its binary representation according to the DNS

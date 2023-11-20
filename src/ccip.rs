@@ -21,7 +21,7 @@ pub struct CCIPResponse {
 pub async fn handle_ccip_raw(
     client: &reqwest::Client,
     url: &str,
-    sender: Address,
+    sender: &Address,
     calldata: &[u8],
 ) -> Result<Bytes, CCIPRequestError> {
     tracing::debug!("making CCIP request to {url}");
@@ -94,7 +94,7 @@ pub async fn handle_ccip_raw(
 /// an opaque byte string to send to callbackFunction on Offchain Resolver contract.
 pub async fn handle_ccip<M: Middleware>(
     client: &reqwest::Client,
-    sender: Address,
+    sender: &Address,
     tx: &TypedTransaction,
     calldata: &[u8],
     urls: Vec<String>,

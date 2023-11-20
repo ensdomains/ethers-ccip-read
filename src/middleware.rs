@@ -1,17 +1,16 @@
-use std::str::FromStr;
 use std::time::Duration;
 
 use async_recursion::async_recursion;
 use async_trait::async_trait;
+use ethers_core::types::BlockNumber;
 use ethers_core::{
     abi::{self, ParamType, Token},
-    types::{
-        transaction::eip2718::TypedTransaction, Address, BlockId, BlockNumber, Bytes, NameOrAddress,
-    },
-    utils::{self, hex},
+    types::{transaction::eip2718::TypedTransaction, BlockId, Bytes, NameOrAddress},
+    utils::hex,
 };
 use ethers_providers::{Middleware, MiddlewareError};
 use hex::FromHex;
+use serde_json::Value;
 
 use crate::ccip::handle_ccip;
 use crate::CCIPReadMiddlewareError;
@@ -24,6 +23,9 @@ pub struct CCIPReadMiddleware<M> {
 }
 
 static MAX_CCIP_REDIRECT_ATTEMPT: u8 = 10;
+
+// 0x556f1830
+static OFFCHAIN_LOOKUP_SELECTOR: &[u8] = &[85, 111, 24, 48];
 
 impl<M> CCIPReadMiddleware<M>
 where
@@ -209,101 +211,94 @@ where
             NameOrAddress::Address(addr) => *addr,
         };
 
-        // let tx_value: Value = utils::serialize(transaction);
-        let block_value = utils::serialize(&block_id.unwrap_or_else(|| BlockNumber::Latest.into()));
-        let result = match self.inner().call(transaction, block_id).await {
-            Ok(response) => response.to_string(),
-            Err(provider_error) => {
-                let content = provider_error.as_error_response().unwrap();
-                let data = content.data.as_ref().unwrap_or(&serde_json::Value::Null);
-                if data.is_null() {
-                    return Err(CCIPReadMiddlewareError::GatewayError(content.to_string()));
-                }
-                data.to_string()
-                    .trim_matches('"')
-                    .trim_start_matches("0x")
-                    .to_string()
-            }
-        };
+        let result = self
+            .inner()
+            .call(transaction, block_id)
+            .await
+            .or_else(|err| {
+                let Some(rpc_err) = err.as_error_response() else {
+                    return Err(CCIPReadMiddlewareError::MiddlewareError(err));
+                };
 
-        if block_value.eq("latest")
-            && !tx_sender.is_zero()
-            && result.starts_with("556f1830")
-            && hex::decode(result.clone()).unwrap().len() % 32 == 4
+                let Some(Value::String(data)) = rpc_err.clone().data else {
+                    return Err(CCIPReadMiddlewareError::MiddlewareError(err));
+                };
+
+                Ok(Bytes::from_hex(data)?)
+            })?;
+
+        if !matches!(block_id.unwrap_or(BlockId::Number(BlockNumber::Latest)), BlockId::Number(block) if block.is_latest())
         {
-            let output_types = vec![
-                ParamType::Address,                            // 'address'
-                ParamType::Array(Box::new(ParamType::String)), // 'string[]'
-                ParamType::Bytes,                              // 'bytes'
-                ParamType::FixedBytes(4),                      // 'bytes4'
-                ParamType::Bytes,                              // 'bytes'
-            ];
-
-            let decoded_data: Vec<abi::Token> =
-                abi::decode(&output_types, &Vec::from_hex(&result.clone()[8..]).unwrap()).unwrap();
-
-            if let (
-                Token::Address(addr),
-                Token::Array(strings),
-                Token::Bytes(bytes),
-                Token::FixedBytes(bytes4),
-                Token::Bytes(bytes2),
-            ) = (
-                decoded_data.get(0).unwrap(),
-                decoded_data.get(1).unwrap(),
-                decoded_data.get(2).unwrap(),
-                decoded_data.get(3).unwrap(),
-                decoded_data.get(4).unwrap(),
-            ) {
-                let sender: Address = *addr;
-                let urls: Vec<String> = strings
-                    .iter()
-                    .map(|t| match t {
-                        Token::String(s) => s,
-                        _ => panic!("CCIP Read contained corrupt URL string"),
-                    })
-                    .cloned()
-                    .collect();
-
-                let call_data: &[u8] = bytes;
-                let callback_selector: Vec<u8> = bytes4.clone();
-                let extra_data: &[u8] = bytes2;
-
-                if !sender.eq(&tx_sender) {
-                    return Err(CCIPReadMiddlewareError::SenderError {
-                        sender: format!("0x{:x}", sender),
-                    });
-                }
-
-                let ccip_result =
-                    handle_ccip(&self.reqwest_client, sender, transaction, call_data, urls).await?;
-                if ccip_result.is_empty() {
-                    return Err(CCIPReadMiddlewareError::GatewayNotFoundError);
-                }
-
-                let ccip_result_token = Token::Bytes(ccip_result.as_ref().to_vec());
-                let extra_data_token = Token::Bytes(extra_data.into());
-
-                let tokens = vec![ccip_result_token, extra_data_token];
-
-                let encoded_data = abi::encode(&tokens);
-                let mut new_transaction = transaction.clone();
-                new_transaction.set_data(Bytes::from(
-                    [callback_selector.clone(), encoded_data.clone()].concat(),
-                ));
-
-                return self._call(&new_transaction, block_id, attempt + 1).await;
-            }
+            return Ok(result);
         }
-        let result = match Bytes::from_str(&result) {
-            Ok(bytes) => bytes,
-            Err(error) => {
-                println!("error: {:?}", error);
-                return Err(CCIPReadMiddlewareError::GatewayError(error.to_string()));
-            }
+
+        if tx_sender.is_zero()
+            || !result.starts_with(OFFCHAIN_LOOKUP_SELECTOR)
+            || result.len() % 32 != 4
+        {
+            return Ok(result);
+        }
+
+        let output_types = vec![
+            ParamType::Address,                            // 'address'
+            ParamType::Array(Box::new(ParamType::String)), // 'string[]'
+            ParamType::Bytes,                              // 'bytes'
+            ParamType::FixedBytes(4),                      // 'bytes4'
+            ParamType::Bytes,                              // 'bytes'
+        ];
+
+        let decoded_data: Vec<Token> = abi::decode(&output_types, &result[4..])?;
+
+        let (
+            Some(Token::Address(sender)),
+            Some(Token::Array(urls)),
+            Some(Token::Bytes(calldata)),
+            Some(Token::FixedBytes(callback_selector)),
+            Some(Token::Bytes(extra_data)),
+        ) = (
+            decoded_data.get(0),
+            decoded_data.get(1),
+            decoded_data.get(2),
+            decoded_data.get(3),
+            decoded_data.get(4),
+        )
+        else {
+            return Ok(result);
         };
 
-        Ok(result)
+        let urls: Vec<String> = urls
+            .iter()
+            .cloned()
+            // NOTE: not sure about how good filter_map is here
+            //  i.e. should we return an error or handle it more gracefully?
+            //  for now, ignoring non-string values is definitely better than panicking
+            .filter_map(|t| t.into_string())
+            .collect();
+
+        if !sender.eq(&tx_sender) {
+            return Err(CCIPReadMiddlewareError::SenderError {
+                sender: format!("0x{:x}", sender),
+            });
+        }
+
+        let ccip_result =
+            handle_ccip(&self.reqwest_client, sender, transaction, calldata, urls).await?;
+
+        if ccip_result.is_empty() {
+            return Err(CCIPReadMiddlewareError::GatewayNotFoundError);
+        }
+
+        let ccip_result_token = Token::Bytes(ethers_core::abi::Bytes::from(ccip_result.as_ref()));
+        let extra_data_token = Token::Bytes(extra_data.clone());
+
+        let encoded_data = abi::encode(&[ccip_result_token, extra_data_token]);
+
+        let mut callback_tx = transaction.clone();
+        callback_tx.set_data(Bytes::from(
+            [callback_selector.clone(), encoded_data.clone()].concat(),
+        ));
+
+        return self._call(&callback_tx, block_id, attempt + 1).await;
     }
 }
 

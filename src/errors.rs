@@ -1,3 +1,4 @@
+use ethers_core::utils::hex::FromHexError;
 use std::collections::HashMap;
 use std::fmt::Display;
 
@@ -53,6 +54,13 @@ pub enum CCIPReadMiddlewareError<M: Middleware> {
 
     #[error("Error(s) during NFT ownership verification: {0}")]
     NFTOwnerError(String),
+
+    // FIXME: handle better
+    #[error("Error(s) decoding revert bytes: {0}")]
+    HexDecodeError(#[from] FromHexError),
+
+    #[error("Error(s) decoding abi: {0}")]
+    AbiDecodeError(#[from] ethers_core::abi::Error),
 
     #[error("Unsupported URL scheme")]
     UnsupportedURLSchemeError,
