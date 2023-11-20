@@ -24,6 +24,8 @@ pub async fn handle_ccip_raw(
     sender: Address,
     calldata: &[u8],
 ) -> Result<Bytes, CCIPRequestError> {
+    tracing::debug!("making CCIP request to {url}");
+
     let sender_hex = hex::encode_prefixed(sender.0);
     let data_hex: String = hex::encode_prefixed(calldata);
 
