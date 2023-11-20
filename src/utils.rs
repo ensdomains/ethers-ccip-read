@@ -3,6 +3,14 @@ use ethers_core::{
     types::Bytes,
 };
 
+pub(crate) fn truncate_str(src: &str, side: usize) -> String {
+    if src.len() < side * 2 + 3 {
+        return src.to_string();
+    }
+
+    format!("{}..{}", &src[..side], &src[src.len() - side..])
+}
+
 /// infallible conversion of Bytes to Address/String
 ///
 /// # Panics
