@@ -1,9 +1,17 @@
+use ethers_core::abi;
+use ethers_core::abi::{Detokenize, ParamType};
+
 pub(crate) fn truncate_str(src: &str, side: usize) -> String {
     if src.len() < side * 2 + 3 {
         return src.to_string();
     }
 
     format!("{}..{}", &src[..side], &src[src.len() - side..])
+}
+
+pub(crate) fn decode_bytes<T: Detokenize>(param: ParamType, bytes: &[u8]) -> Result<T, abi::Error> {
+    let tokens = abi::decode(&[param], bytes)?;
+    T::from_tokens(tokens).map_err(|err| abi::Error::Other(err.to_string().into()))
 }
 
 /// Encodes a domain name into its binary representation according to the DNS

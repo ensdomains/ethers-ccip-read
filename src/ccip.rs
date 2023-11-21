@@ -123,7 +123,6 @@ pub async fn handle_ccip<M: Middleware>(
         }
     }
 
-    // TODO: eh, figure out nicer error handling
     Err(CCIPReadMiddlewareError::FetchError(CCIPFetchError(errors)))
 }
 

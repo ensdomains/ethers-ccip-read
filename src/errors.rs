@@ -36,9 +36,6 @@ pub enum CCIPReadMiddlewareError<M: Middleware> {
     #[error("CCIP Read sender did not match {}", sender)]
     SenderError { sender: String },
 
-    #[error("Bad result from backend: {0}")]
-    GatewayError(String),
-
     #[error("CCIP Read no provided URLs")]
     GatewayNotFoundError,
 
@@ -55,7 +52,6 @@ pub enum CCIPReadMiddlewareError<M: Middleware> {
     #[error("Error(s) during NFT ownership verification: {0}")]
     NFTOwnerError(String),
 
-    // FIXME: handle better
     #[error("Error(s) decoding revert bytes: {0}")]
     HexDecodeError(#[from] FromHexError),
 
