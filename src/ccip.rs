@@ -115,10 +115,7 @@ pub async fn handle_ccip<M: Middleware>(
         match result {
             Ok(result) => return Ok(result),
             Err(err) => {
-                errors
-                    .entry(url)
-                    .or_insert_with(Vec::new)
-                    .push(err.to_string());
+                errors.entry(url).or_default().push(err.to_string());
             }
         }
     }
