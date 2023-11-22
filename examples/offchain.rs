@@ -1,7 +1,9 @@
+use std::convert::TryFrom;
+
 use anyhow::Result;
 use ethers::prelude::*;
+
 use ethers_ccip_read::CCIPReadMiddleware;
-use std::convert::TryFrom;
 
 #[tokio::main]
 async fn main() -> Result<()> {

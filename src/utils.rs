@@ -1,17 +1,32 @@
-use ethers_core::{
-    abi::{self, Detokenize, ParamType},
-    types::Bytes,
-};
+use ethers_core::abi;
+use ethers_core::abi::{Detokenize, ParamType};
+use std::time::Duration;
 
-/// infallible conversion of Bytes to Address/String
-///
-/// # Panics
-///
-/// If the provided bytes were not an interpretation of an address
-pub fn decode_bytes<T: Detokenize>(param: ParamType, bytes: Bytes) -> T {
-    let tokens = abi::decode(&[param], bytes.as_ref())
-        .expect("could not abi-decode bytes to address tokens");
-    T::from_tokens(tokens).expect("could not parse tokens as address")
+pub(crate) fn truncate_str(src: &str, side: usize) -> String {
+    if src.len() < side * 2 + 3 {
+        return src.to_string();
+    }
+
+    format!("{}..{}", &src[..side], &src[src.len() - side..])
+}
+
+pub(crate) fn decode_bytes<T: Detokenize>(param: ParamType, bytes: &[u8]) -> Result<T, abi::Error> {
+    let tokens = abi::decode(&[param], bytes)?;
+    T::from_tokens(tokens).map_err(|err| abi::Error::Other(err.to_string().into()))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn build_reqwest(timeout: Duration) -> reqwest::Client {
+    reqwest::Client::builder()
+        .timeout(timeout)
+        .build()
+        .expect("should be a valid reqwest client")
+}
+
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn build_reqwest(_timeout: Duration) -> reqwest::Client {
+    // reqwest doesn't support timeouts on wasm
+    reqwest::Client::new()
 }
 
 /// Encodes a domain name into its binary representation according to the DNS
