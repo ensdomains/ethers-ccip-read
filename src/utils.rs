@@ -1,5 +1,6 @@
 use ethers_core::abi;
 use ethers_core::abi::{Detokenize, ParamType};
+use std::time::Duration;
 
 pub(crate) fn truncate_str(src: &str, side: usize) -> String {
     if src.len() < side * 2 + 3 {
@@ -12,6 +13,20 @@ pub(crate) fn truncate_str(src: &str, side: usize) -> String {
 pub(crate) fn decode_bytes<T: Detokenize>(param: ParamType, bytes: &[u8]) -> Result<T, abi::Error> {
     let tokens = abi::decode(&[param], bytes)?;
     T::from_tokens(tokens).map_err(|err| abi::Error::Other(err.to_string().into()))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn build_reqwest(timeout: Duration) -> reqwest::Client {
+    reqwest::Client::builder()
+        .timeout(timeout)
+        .build()
+        .expect("should be a valid reqwest client")
+}
+
+#[cfg(target_arch = "wasm32")]
+pub(crate) fn build_reqwest(_timeout: Duration) -> reqwest::Client {
+    // reqwest doesn't support timeouts on wasm
+    reqwest::Client::new()
 }
 
 /// Encodes a domain name into its binary representation according to the DNS

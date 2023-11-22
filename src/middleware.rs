@@ -18,7 +18,7 @@ use reqwest::Url;
 use serde_json::Value;
 
 use crate::ccip::handle_ccip;
-use crate::utils::{decode_bytes, dns_encode};
+use crate::utils::{build_reqwest, decode_bytes, dns_encode};
 use crate::CCIPReadMiddlewareError;
 
 #[derive(Debug, Clone)]
@@ -67,11 +67,7 @@ impl<M: Middleware> CCIPReadMiddlewareBuilder<M> {
         Ok(CCIPReadMiddleware {
             provider: self.provider.ok_or("provider is required".to_string())?,
             ens: self.ens.unwrap_or(ens::ENS_ADDRESS),
-            reqwest_client: reqwest::Client::builder()
-                // TODO: discuss an appropriate default timeout, 4 seconds is a very random decision
-                .timeout(self.timeout.unwrap_or(Duration::from_secs(4)))
-                .build()
-                .expect("should be a valid reqwest client"),
+            reqwest_client: build_reqwest(self.timeout.unwrap_or(Duration::from_secs(10))),
             max_redirect_attempt: self.max_redirect_attempt.unwrap_or(10),
         })
     }
@@ -226,7 +222,8 @@ impl<M: Middleware> CCIPReadMiddleware<M> {
         Ok(H160::zero())
     }
 
-    #[async_recursion]
+    #[cfg_attr(target_arch = "wasm32", async_recursion(?Send))]
+    #[cfg_attr(not(target_arch = "wasm32"), async_recursion)]
     async fn _call(
         &self,
         transaction: &TypedTransaction,
@@ -365,8 +362,6 @@ where
 
     /// Resolve a field of an ENS name
     async fn resolve_field(&self, ens_name: &str, field: &str) -> Result<String, Self::Error> {
-        println!("calling resolve field");
-
         let field: String = self
             .query_resolver_parameters(
                 ParamType::String,
@@ -524,8 +519,6 @@ mod tests {
         assert_eq!(record, email);
     }
 
-    // todo: requires modification in ethers-rs, uncomment when merged
-    //
     #[tokio::test]
     async fn test_mismatched_sender() {
         let resolver_address = "0xC1735677a60884ABbCF72295E88d47764BeDa282";
