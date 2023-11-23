@@ -116,7 +116,7 @@ pub async fn handle_ccip<M: Middleware>(
         let result = handle_ccip_raw(client, &url, sender, calldata).await;
         requests.push(CCIPRequest {
             url: url.clone(),
-            sender: sender.clone(),
+            sender: *sender,
             calldata: calldata.to_vec().into(),
         });
 
