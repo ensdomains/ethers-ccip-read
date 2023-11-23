@@ -340,7 +340,7 @@ impl<M: Middleware> CCIPReadMiddleware<M> {
         block: Option<BlockId>,
     ) -> Result<(Bytes, Vec<CCIPRequest>), CCIPReadMiddlewareError<M>> {
         let mut requests = Vec::new();
-        return self._call(tx, block, 0, &mut requests).await;
+        self._call(tx, block, 0, &mut requests).await
     }
 }
 
