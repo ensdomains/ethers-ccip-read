@@ -11,6 +11,7 @@ use serde::Deserialize;
 use crate::errors::{CCIPFetchError, CCIPRequestError};
 use crate::utils::truncate_str;
 use crate::CCIPReadMiddlewareError;
+use crate::CCIPRequest;
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct CCIPResponse {
@@ -98,10 +99,10 @@ pub async fn handle_ccip<M: Middleware>(
     tx: &TypedTransaction,
     calldata: &[u8],
     urls: Vec<String>,
-) -> Result<Bytes, CCIPReadMiddlewareError<M>> {
+) -> Result<(Bytes, Vec<CCIPRequest>), CCIPReadMiddlewareError<M>> {
     // If there are no URLs or the transaction's destination is empty, return an empty result
     if urls.is_empty() || tx.to().is_none() {
-        return Ok(Bytes::new());
+        return Ok((Bytes::new(), Vec::new()));
     }
 
     let urls = dedup_ord(&urls);
@@ -109,11 +110,18 @@ pub async fn handle_ccip<M: Middleware>(
     // url —> [error_message]
     let mut errors: HashMap<String, Vec<String>> = HashMap::new();
 
+    let mut requests = Vec::new();
+
     for url in urls {
         let result = handle_ccip_raw(client, &url, sender, calldata).await;
+        requests.push(CCIPRequest {
+            url: url.clone(),
+            sender: sender.clone(),
+            calldata: calldata.to_vec().into(),
+        });
 
         match result {
-            Ok(result) => return Ok(result),
+            Ok(result) => return Ok((result, requests)),
             Err(err) => {
                 errors.entry(url).or_default().push(err.to_string());
             }
