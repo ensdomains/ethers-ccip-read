@@ -334,6 +334,8 @@ impl<M: Middleware> CCIPReadMiddleware<M> {
             .await
     }
 
+    /// Call the underlying middleware with the provided transaction and block,
+    /// returning both the result of the call and the CCIP requests made during the call
     pub async fn call_ccip(
         &self,
         tx: &TypedTransaction,
