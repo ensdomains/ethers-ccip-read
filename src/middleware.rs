@@ -19,7 +19,7 @@ use serde_json::Value;
 
 use crate::ccip::handle_ccip;
 use crate::utils::{build_reqwest, decode_bytes, dns_encode};
-use crate::CCIPReadMiddlewareError;
+use crate::{CCIPReadMiddlewareError, CCIPRequest};
 
 #[derive(Debug, Clone)]
 pub struct CCIPReadMiddleware<M> {
@@ -229,7 +229,8 @@ impl<M: Middleware> CCIPReadMiddleware<M> {
         transaction: &TypedTransaction,
         block_id: Option<BlockId>,
         attempt: u8,
-    ) -> Result<Bytes, CCIPReadMiddlewareError<M>> {
+        requests_buffer: &mut Vec<CCIPRequest>,
+    ) -> Result<(Bytes, Vec<CCIPRequest>), CCIPReadMiddlewareError<M>> {
         if attempt >= self.max_redirect_attempt {
             // may need more info
             return Err(CCIPReadMiddlewareError::MaxRedirectionError);
@@ -258,14 +259,14 @@ impl<M: Middleware> CCIPReadMiddleware<M> {
 
         if !matches!(block_id.unwrap_or(BlockId::Number(BlockNumber::Latest)), BlockId::Number(block) if block.is_latest())
         {
-            return Ok(result);
+            return Ok((result, requests_buffer.to_vec()));
         }
 
         if tx_sender.is_zero()
             || !result.starts_with(OFFCHAIN_LOOKUP_SELECTOR)
             || result.len() % 32 != 4
         {
-            return Ok(result);
+            return Ok((result, requests_buffer.to_vec()));
         }
 
         let output_types = vec![
@@ -292,7 +293,7 @@ impl<M: Middleware> CCIPReadMiddleware<M> {
             decoded_data.get(4),
         )
         else {
-            return Ok(result);
+            return Ok((result, requests_buffer.to_vec()));
         };
 
         let urls: Vec<String> = urls
@@ -310,8 +311,10 @@ impl<M: Middleware> CCIPReadMiddleware<M> {
             });
         }
 
-        let ccip_result =
+        let (ccip_result, requests) =
             handle_ccip(&self.reqwest_client, sender, transaction, calldata, urls).await?;
+
+        requests_buffer.extend(requests);
 
         if ccip_result.is_empty() {
             return Err(CCIPReadMiddlewareError::GatewayNotFoundError);
@@ -327,7 +330,19 @@ impl<M: Middleware> CCIPReadMiddleware<M> {
             [callback_selector.clone(), encoded_data.clone()].concat(),
         ));
 
-        self._call(&callback_tx, block_id, attempt + 1).await
+        self._call(&callback_tx, block_id, attempt + 1, requests_buffer)
+            .await
+    }
+
+    /// Call the underlying middleware with the provided transaction and block,
+    /// returning both the result of the call and the CCIP requests made during the call
+    pub async fn call_ccip(
+        &self,
+        tx: &TypedTransaction,
+        block: Option<BlockId>,
+    ) -> Result<(Bytes, Vec<CCIPRequest>), CCIPReadMiddlewareError<M>> {
+        let mut requests = Vec::new();
+        self._call(tx, block, 0, &mut requests).await
     }
 }
 
@@ -353,7 +368,7 @@ where
         tx: &TypedTransaction,
         block: Option<BlockId>,
     ) -> Result<Bytes, Self::Error> {
-        return self._call(tx, block, 0).await;
+        Ok(self.call_ccip(tx, block).await?.0)
     }
 
     /**
