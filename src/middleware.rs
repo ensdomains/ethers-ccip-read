@@ -254,7 +254,13 @@ impl<M: Middleware> CCIPReadMiddleware<M> {
                     return Err(CCIPReadMiddlewareError::MiddlewareError(err));
                 };
 
-                Ok(Bytes::from_hex(data)?)
+                let bytes = Bytes::from_hex(data)?;
+
+                if !bytes.starts_with(OFFCHAIN_LOOKUP_SELECTOR) {
+                    return Err(CCIPReadMiddlewareError::MiddlewareError(err));
+                }
+
+                Ok(bytes)
             })?;
 
         if !matches!(block_id.unwrap_or(BlockId::Number(BlockNumber::Latest)), BlockId::Number(block) if block.is_latest())
@@ -262,10 +268,7 @@ impl<M: Middleware> CCIPReadMiddleware<M> {
             return Ok((result, requests_buffer.to_vec()));
         }
 
-        if tx_sender.is_zero()
-            || !result.starts_with(OFFCHAIN_LOOKUP_SELECTOR)
-            || result.len() % 32 != 4
-        {
+        if tx_sender.is_zero() || result.len() % 32 != 4 {
             return Ok((result, requests_buffer.to_vec()));
         }
 
