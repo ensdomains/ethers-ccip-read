@@ -282,6 +282,7 @@ impl<M: Middleware> CCIPReadMiddleware<M> {
 
         let decoded_data: Vec<Token> = abi::decode(&output_types, &result[4..])?;
 
+        #[allow(clippy::get_first)]
         let (
             Some(Token::Address(sender)),
             Some(Token::Array(urls)),
